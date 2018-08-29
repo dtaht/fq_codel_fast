@@ -22,7 +22,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <net/netlink.h>
-#include <net/pkt_sched.h>
+#include "pkt_sched.h"
 #include <net/pkt_cls.h>
 #include "codel.h"
 #include "codel_impl.h"
@@ -404,8 +404,7 @@ static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 
 	if (tb[TCA_FQ_CODEL_CE_THRESHOLD]) {
 		u64 val = nla_get_u32(tb[TCA_FQ_CODEL_CE_THRESHOLD]);
-
-		q->cparams.ce_threshold = (val * NSEC_PER_USEC) >> CODEL_SHIFT;
+		return -EOPNOTSUPP;
 	}
 
 	if (tb[TCA_FQ_CODEL_INTERVAL]) {
@@ -544,11 +543,6 @@ static int fq_codel_dump(struct Qdisc *sch, struct sk_buff *skb)
 			q->flows_cnt))
 		goto nla_put_failure;
 
-	if (q->cparams.ce_threshold != CODEL_DISABLED_THRESHOLD &&
-	    nla_put_u32(skb, TCA_FQ_CODEL_CE_THRESHOLD,
-			codel_time_to_us(q->cparams.ce_threshold)))
-		goto nla_put_failure;
-
 	return nla_nest_end(skb, opts);
 
 nla_put_failure:
@@ -567,7 +561,7 @@ static int fq_codel_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 	st.qdisc_stats.drop_overlimit = q->drop_overlimit;
 	st.qdisc_stats.ecn_mark = q->cstats.ecn_mark;
 	st.qdisc_stats.new_flow_count = q->new_flow_count;
-	st.qdisc_stats.ce_mark = q->cstats.ce_mark;
+	st.qdisc_stats.ce_mark = 0;
 	st.qdisc_stats.memory_usage  = q->memory_usage;
 	st.qdisc_stats.drop_overmemory = q->drop_overmemory;
 
