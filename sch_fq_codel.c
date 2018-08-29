@@ -82,7 +82,7 @@ static unsigned int fq_codel_classify(struct sk_buff *skb, struct Qdisc *sch,
 				      int *qerr)
 {
 	struct fq_codel_sched_data *q = qdisc_priv(sch);
-	return fq_codel_hash(q, skb) + 1;
+	return fq_codel_hash(q, skb);
 }
 
 /* helper functions : might be changed when/if skb use a standard list_head */
@@ -166,13 +166,6 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	bool memory_limited;
 
 	idx = fq_codel_classify(skb, sch, &ret);
-	if (idx == 0) {
-		if (ret & __NET_XMIT_BYPASS)
-			qdisc_qstats_drop(sch);
-		__qdisc_drop(skb, to_free);
-		return ret;
-	}
-	idx--;
 
 	codel_set_enqueue_time(skb);
 	flow = &q->flows[idx];
