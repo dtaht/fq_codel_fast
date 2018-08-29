@@ -143,10 +143,10 @@ struct codel_vars {
  * ecn_mark:	number of packets we ECN marked instead of dropping
  */
 struct codel_stats {
-	u32		maxpacket;
 	u32		drop_count;
 	u32		drop_len;
 	u32		ecn_mark;
+	u32		maxpacket;
 };
 
 #define CODEL_DISABLED_THRESHOLD INT_MAX

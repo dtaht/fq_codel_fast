@@ -117,9 +117,6 @@ static bool codel_should_drop(const struct sk_buff *skb,
 	skb_len = skb_len_func(skb);
 	vars->ldelay = now - skb_time_func(skb);
 
-	if (unlikely(skb_len > stats->maxpacket))
-		stats->maxpacket = skb_len;
-
 	if (codel_time_before(vars->ldelay, params->target) ||
 	    *backlog <= params->mtu) {
 		/* went below - stay below for at least interval */

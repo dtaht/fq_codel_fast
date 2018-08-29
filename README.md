@@ -13,6 +13,8 @@ added that also weren't used, and since the major
 use of fq_codel is in sqm systems, adding in an
 fast integral shaper is a goal.
 
+Probably override the ce_threshold for this
+
 I also might fiddle with alternate codel ideas
 but first up is to make it fast.
 
