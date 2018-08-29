@@ -82,37 +82,7 @@ static unsigned int fq_codel_classify(struct sk_buff *skb, struct Qdisc *sch,
 				      int *qerr)
 {
 	struct fq_codel_sched_data *q = qdisc_priv(sch);
-	struct tcf_proto *filter;
-	struct tcf_result res;
-	int result;
-
-	if (TC_H_MAJ(skb->priority) == sch->handle &&
-	    TC_H_MIN(skb->priority) > 0 &&
-	    TC_H_MIN(skb->priority) <= q->flows_cnt)
-		return TC_H_MIN(skb->priority);
-
-	filter = rcu_dereference_bh(q->filter_list);
-	if (!filter)
-		return fq_codel_hash(q, skb) + 1;
-
-	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
-	result = tcf_classify(skb, filter, &res, false);
-	if (result >= 0) {
-#ifdef CONFIG_NET_CLS_ACT
-		switch (result) {
-		case TC_ACT_STOLEN:
-		case TC_ACT_QUEUED:
-		case TC_ACT_TRAP:
-			*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
-			/* fall through */
-		case TC_ACT_SHOT:
-			return 0;
-		}
-#endif
-		if (TC_H_MIN(res.classid) <= q->flows_cnt)
-			return TC_H_MIN(res.classid);
-	}
-	return 0;
+	return fq_codel_hash(q, skb) + 1;
 }
 
 /* helper functions : might be changed when/if skb use a standard list_head */
@@ -403,7 +373,6 @@ static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 	}
 
 	if (tb[TCA_FQ_CODEL_CE_THRESHOLD]) {
-		u64 val = nla_get_u32(tb[TCA_FQ_CODEL_CE_THRESHOLD]);
 		return -EOPNOTSUPP;
 	}
 
