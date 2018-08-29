@@ -67,7 +67,6 @@ struct fq_codel_sched_data {
 	u32		memory_usage;
 	u32		drop_overmemory;
 	u32		drop_overlimit;
-	u32		new_flow_count;
 
 	struct list_head new_flows;	/* list of new flows */
 	struct list_head old_flows;	/* list of old flows */
@@ -146,6 +145,7 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 		mem += get_codel_cb(skb)->mem_usage;
 		__qdisc_drop(skb, to_free);
 	} while (++i < max_packets && len < threshold);
+	/* FIXME: Increase codel signalling rate also */
 
 	q->backlogs[idx] -= len;
 	q->memory_usage -= mem;
@@ -182,7 +182,6 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 
 	if (list_empty(&flow->flowchain)) {
 		list_add_tail(&flow->flowchain, &q->new_flows);
-		q->new_flow_count++;
 		flow->deficit = q->quantum;
 	}
 	get_codel_cb(skb)->mem_usage = skb->truesize;
@@ -525,7 +524,7 @@ static int fq_codel_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 	st.qdisc_stats.maxpacket = q->cstats.maxpacket;
 	st.qdisc_stats.drop_overlimit = q->drop_overlimit;
 	st.qdisc_stats.ecn_mark = q->cstats.ecn_mark;
-	st.qdisc_stats.new_flow_count = q->new_flow_count;
+	st.qdisc_stats.new_flow_count = 0;
 	st.qdisc_stats.ce_mark = 0;
 	st.qdisc_stats.memory_usage  = q->memory_usage;
 	st.qdisc_stats.drop_overmemory = q->drop_overmemory;
