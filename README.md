@@ -18,3 +18,5 @@ Probably override the ce_threshold for this
 I also might fiddle with alternate codel ideas
 but first up is to make it fast.
 
+also test increasing the bulk dropper signal strength
+

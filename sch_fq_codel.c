@@ -145,7 +145,12 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 		mem += get_codel_cb(skb)->mem_usage;
 		__qdisc_drop(skb, to_free);
 	} while (++i < max_packets && len < threshold);
-	/* FIXME: Increase codel signalling rate also */
+	/* Increase codel signalling rate also */
+	/*     vars->count+=i;
+    	       codel_Newton_step(vars);
+    	       codel_control_law(now, params->interval, vars->rec_inv_sqrt);
+	we don't have now here, and we really do want one packet to get through so...	*/
+	flow->cvars.count += i;
 
 	q->backlogs[idx] -= len;
 	q->memory_usage -= mem;
