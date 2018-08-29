@@ -44,6 +44,8 @@
  * Low memory footprint (64 bytes per flow)
  */
 
+#define FQ_FLOWS 1024
+
 struct fq_codel_flow {
 	struct sk_buff	  *head;
 	struct sk_buff	  *tail;
@@ -57,7 +59,6 @@ struct fq_codel_sched_data {
 	struct tcf_block *block;
 	struct fq_codel_flow *flows;	/* Flows table [flows_cnt] */
 	u32		*backlogs;	/* backlog table [flows_cnt] */
-	u32		flows_cnt;	/* number of flows */
 	u32		quantum;	/* psched_mtu(qdisc_dev(sch)); */
 	u32		drop_batch_size;
 	u32		memory_limit;
@@ -75,7 +76,7 @@ struct fq_codel_sched_data {
 static unsigned int fq_codel_hash(const struct fq_codel_sched_data *q,
 				  struct sk_buff *skb)
 {
-	return reciprocal_scale(skb_get_hash(skb), q->flows_cnt);
+	return reciprocal_scale(skb_get_hash(skb), FQ_FLOWS);
 }
 
 static unsigned int fq_codel_classify(struct sk_buff *skb, struct Qdisc *sch,
@@ -126,7 +127,7 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 	 * In stress mode, we'll try to drop 64 packets from the flow,
 	 * amortizing this linear lookup to one cache line per drop.
 	 */
-	for (i = 0; i < q->flows_cnt; i++) {
+	for (i = 0; i < FQ_FLOWS; i++) {
 		if (q->backlogs[i] > maxbacklog) {
 			maxbacklog = q->backlogs[i];
 			idx = i;
@@ -317,14 +318,14 @@ static void fq_codel_reset(struct Qdisc *sch)
 
 	INIT_LIST_HEAD(&q->new_flows);
 	INIT_LIST_HEAD(&q->old_flows);
-	for (i = 0; i < q->flows_cnt; i++) {
+	for (i = 0; i < FQ_FLOWS; i++) {
 		struct fq_codel_flow *flow = q->flows + i;
 
 		fq_codel_flow_purge(flow);
 		INIT_LIST_HEAD(&flow->flowchain);
 		codel_vars_init(&flow->cvars);
 	}
-	memset(q->backlogs, 0, q->flows_cnt * sizeof(u32));
+	memset(q->backlogs, 0, FQ_FLOWS * sizeof(u32));
 	sch->q.qlen = 0;
 	sch->qstats.backlog = 0;
 	q->memory_usage = 0;
@@ -357,11 +358,8 @@ static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 	if (err < 0)
 		return err;
 	if (tb[TCA_FQ_CODEL_FLOWS]) {
-		if (q->flows)
-			return -EINVAL;
-		q->flows_cnt = nla_get_u32(tb[TCA_FQ_CODEL_FLOWS]);
-		if (!q->flows_cnt ||
-		    q->flows_cnt > 65536)
+		u32 fl = nla_get_u32(tb[TCA_FQ_CODEL_FLOWS]);
+		if (fl != FQ_FLOWS)
 			return -EINVAL;
 	}
 	sch_tree_lock(sch);
@@ -430,7 +428,6 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 	int err;
 
 	sch->limit = 10*1024;
-	q->flows_cnt = 1024;
 	q->memory_limit = 32 << 20; /* 32 MBytes */
 	q->drop_batch_size = 64;
 	q->quantum = psched_mtu(qdisc_dev(sch));
@@ -452,19 +449,19 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 		goto init_failure;
 
 	if (!q->flows) {
-		q->flows = kvcalloc(q->flows_cnt,
+		q->flows = kvcalloc(FQ_FLOWS,
 				    sizeof(struct fq_codel_flow),
 				    GFP_KERNEL);
 		if (!q->flows) {
 			err = -ENOMEM;
 			goto init_failure;
 		}
-		q->backlogs = kvcalloc(q->flows_cnt, sizeof(u32), GFP_KERNEL);
+		q->backlogs = kvcalloc(FQ_FLOWS, sizeof(u32), GFP_KERNEL);
 		if (!q->backlogs) {
 			err = -ENOMEM;
 			goto alloc_failure;
 		}
-		for (i = 0; i < q->flows_cnt; i++) {
+		for (i = 0; i < FQ_FLOWS; i++) {
 			struct fq_codel_flow *flow = q->flows + i;
 
 			INIT_LIST_HEAD(&flow->flowchain);
@@ -481,7 +478,6 @@ alloc_failure:
 	kvfree(q->flows);
 	q->flows = NULL;
 init_failure:
-	q->flows_cnt = 0;
 	return err;
 }
 
@@ -509,7 +505,7 @@ static int fq_codel_dump(struct Qdisc *sch, struct sk_buff *skb)
 	    nla_put_u32(skb, TCA_FQ_CODEL_MEMORY_LIMIT,
 			q->memory_limit) ||
 	    nla_put_u32(skb, TCA_FQ_CODEL_FLOWS,
-			q->flows_cnt))
+			FQ_FLOWS))
 		goto nla_put_failure;
 
 	return nla_nest_end(skb, opts);
@@ -592,7 +588,7 @@ static int fq_codel_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 	struct gnet_stats_queue qs = { 0 };
 	struct tc_fq_codel_xstats xstats;
 
-	if (idx < q->flows_cnt) {
+	if (idx < FQ_FLOWS) {
 		const struct fq_codel_flow *flow = &q->flows[idx];
 		const struct sk_buff *skb;
 
@@ -626,7 +622,7 @@ static int fq_codel_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 	}
 	if (gnet_stats_copy_queue(d, NULL, &qs, qs.qlen) < 0)
 		return -1;
-	if (idx < q->flows_cnt)
+	if (idx < FQ_FLOWS)
 		return gnet_stats_copy_app(d, &xstats, sizeof(xstats));
 	return 0;
 }
@@ -639,7 +635,7 @@ static void fq_codel_walk(struct Qdisc *sch, struct qdisc_walker *arg)
 	if (arg->stop)
 		return;
 
-	for (i = 0; i < q->flows_cnt; i++) {
+	for (i = 0; i < FQ_FLOWS; i++) {
 		if (list_empty(&q->flows[i].flowchain) ||
 		    arg->count < arg->skip) {
 			arg->count++;
