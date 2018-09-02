@@ -592,8 +592,7 @@ static int fq_codel_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 		memset(&xstats, 0, sizeof(xstats));
 		xstats.type = TCA_FQ_CODEL_XSTATS_CLASS;
 		xstats.class_stats.deficit = flow->deficit;
-		xstats.class_stats.ldelay =
-			codel_time_to_us(flow->cvars.ldelay);
+		xstats.class_stats.ldelay = 0;
 		xstats.class_stats.count = flow->cvars.count;
 		xstats.class_stats.lastcount = flow->cvars.lastcount;
 		xstats.class_stats.dropping = flow->cvars.dropping;

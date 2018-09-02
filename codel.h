@@ -119,7 +119,6 @@ struct codel_params {
  * @first_above_time:	when we went (or will go) continuously above target
  *			for interval
  * @drop_next:		time to drop next packet, or when we dropped last
- * @ldelay:		sojourn time of last dequeued packet
  */
 struct codel_vars {
 	u32		count;
@@ -128,7 +127,6 @@ struct codel_vars {
 	u16		rec_inv_sqrt;
 	codel_time_t	first_above_time;
 	codel_time_t	drop_next;
-	codel_time_t	ldelay;
 };
 
 #define REC_INV_SQRT_BITS (8 * sizeof(u16)) /* or sizeof_in_bits(rec_inv_sqrt) */
