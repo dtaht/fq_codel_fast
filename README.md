@@ -16,7 +16,11 @@ fast integral shaper is a goal.
 Probably override the ce_threshold for this
 
 I also might fiddle with alternate codel ideas
-but first up is to make it fast.
+but first up is to make it fast. Adding in the scheduler
+component requires a mild rewrite codel because it
+throws away the timestamp and works in a different
+time base.
 
 also test increasing the bulk dropper signal strength
+
 
