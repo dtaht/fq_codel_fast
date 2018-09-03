@@ -171,7 +171,7 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	bool memory_limited;
 
 	idx = fq_codel_classify(skb, sch, &ret);
-
+	// FIXME, share the time with the shaper
 	codel_set_enqueue_time(skb);
 	flow = &q->flows[idx];
 	flow_queue_add(flow, skb);
@@ -255,6 +255,7 @@ static struct sk_buff *fq_codel_dequeue(struct Qdisc *sch)
 	struct sk_buff *skb;
 	struct fq_codel_flow *flow;
 	struct list_head *head;
+	u64 now;
 	u32 prev_drop_count, prev_ecn_mark;
 
 begin:
@@ -275,8 +276,9 @@ begin:
 	prev_drop_count = q->cstats.drop_count;
 	prev_ecn_mark = q->cstats.ecn_mark;
 
+	now = ktime_get_ns();
 	skb = codel_dequeue(sch, &sch->qstats.backlog, &q->cparams,
-			    &flow->cvars, &q->cstats, qdisc_pkt_len,
+			    &flow->cvars, &q->cstats, (u32) now << CODEL_SHIFT, qdisc_pkt_len,
 			    codel_get_enqueue_time, drop_func, dequeue_func);
 
 

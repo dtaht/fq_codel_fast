@@ -139,20 +139,19 @@ static struct sk_buff *codel_dequeue(void *ctx,
 				     struct codel_params *params,
 				     struct codel_vars *vars,
 				     struct codel_stats *stats,
+				     codel_time_t now,
 				     codel_skb_len_t skb_len_func,
 				     codel_skb_time_t skb_time_func,
 				     codel_skb_drop_t drop_func,
 				     codel_skb_dequeue_t dequeue_func)
 {
 	struct sk_buff *skb = dequeue_func(vars, ctx);
-	codel_time_t now;
 	bool drop;
 
 	if (!skb) {
 		vars->dropping = false;
 		return skb;
 	}
-	now = codel_get_time();
 	drop = codel_should_drop(skb, ctx, vars, params, stats,
 				 skb_len_func, skb_time_func, backlog, now);
 	if (vars->dropping) {
