@@ -278,7 +278,7 @@ begin:
 
 	now = ktime_get_ns();
 	skb = codel_dequeue(sch, &sch->qstats.backlog, &q->cparams,
-			    &flow->cvars, &q->cstats, (u32) now << CODEL_SHIFT, qdisc_pkt_len,
+			    &flow->cvars, &q->cstats, (u32) now >> CODEL_SHIFT, qdisc_pkt_len,
 			    codel_get_enqueue_time, drop_func, dequeue_func);
 
 
