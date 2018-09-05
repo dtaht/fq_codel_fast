@@ -57,7 +57,6 @@ struct fq_codel_flow {
 struct fq_codel_sched_data {
 	struct tcf_proto __rcu *filter_list; /* optional external classifier */
 	struct tcf_block *block;
-	struct fq_codel_flow *flows;	/* Flows table [flows_cnt] */
 	u32		*backlogs;	/* backlog table [flows_cnt] */
 	u32		quantum;	/* psched_mtu(qdisc_dev(sch)); */
 	u32		drop_batch_size;
@@ -70,6 +69,7 @@ struct fq_codel_sched_data {
 
 	struct list_head new_flows;	/* list of new flows */
 	struct list_head old_flows;	/* list of old flows */
+	struct fq_codel_flow flows[FQ_FLOWS];	/* Flows table [flows_cnt] */
 };
 
 static unsigned int fq_codel_hash(const struct fq_codel_sched_data *q,
@@ -256,7 +256,6 @@ static struct sk_buff *fq_codel_dequeue(struct Qdisc *sch)
 	struct fq_codel_flow *flow;
 	struct list_head *head;
 	u64 now;
-	u32 prev_drop_count, prev_ecn_mark;
 
 begin:
 	head = &q->new_flows;
@@ -273,12 +272,10 @@ begin:
 		goto begin;
 	}
 
-	prev_drop_count = q->cstats.drop_count;
-	prev_ecn_mark = q->cstats.ecn_mark;
-
 	now = ktime_get_ns();
 	skb = codel_dequeue(sch, &sch->qstats.backlog, &q->cparams,
-			    &flow->cvars, &q->cstats, (u32) now >> CODEL_SHIFT, qdisc_pkt_len,
+			    &flow->cvars, &q->cstats,
+			    (u32) (now >> CODEL_SHIFT), qdisc_pkt_len,
 			    codel_get_enqueue_time, drop_func, dequeue_func);
 
 
@@ -416,7 +413,6 @@ static void fq_codel_destroy(struct Qdisc *sch)
 
 	tcf_block_put(q->block);
 	kvfree(q->backlogs);
-	kvfree(q->flows);
 }
 
 static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
@@ -447,26 +443,17 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 	if (err)
 		goto init_failure;
 
-	if (!q->flows) {
-		q->flows = kvcalloc(FQ_FLOWS,
-				    sizeof(struct fq_codel_flow),
-				    GFP_KERNEL);
-		if (!q->flows) {
-			err = -ENOMEM;
-			goto init_failure;
-		}
-		q->backlogs = kvcalloc(FQ_FLOWS, sizeof(u32), GFP_KERNEL);
-		if (!q->backlogs) {
-			err = -ENOMEM;
-			goto alloc_failure;
-		}
-		for (i = 0; i < FQ_FLOWS; i++) {
-			struct fq_codel_flow *flow = q->flows + i;
-
-			INIT_LIST_HEAD(&flow->flowchain);
-			codel_vars_init(&flow->cvars);
-		}
+	q->backlogs = kvcalloc(FQ_FLOWS, sizeof(u32), GFP_KERNEL);
+	if (!q->backlogs) {
+		err = -ENOMEM;
+		goto alloc_failure;
 	}
+	for (i = 0; i < FQ_FLOWS; i++) {
+		struct fq_codel_flow *flow = q->flows + i;
+
+		INIT_LIST_HEAD(&flow->flowchain);
+		codel_vars_init(&flow->cvars);
+		}
 	if (sch->limit >= 1)
 		sch->flags |= TCQ_F_CAN_BYPASS;
 	else
@@ -474,8 +461,6 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 	return 0;
 
 alloc_failure:
-	kvfree(q->flows);
-	q->flows = NULL;
 init_failure:
 	return err;
 }
