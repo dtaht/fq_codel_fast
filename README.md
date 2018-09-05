@@ -17,10 +17,22 @@ Probably override the ce_threshold for this
 
 I also might fiddle with alternate codel ideas
 but first up is to make it fast. Adding in the scheduler
-component requires a mild rewrite codel because it
+component requires a mild rewrite of codel because it
 throws away the timestamp and works in a different
 time base.
 
-also test increasing the bulk dropper signal strength
+* also test increasing the bulk dropper signal strength
 
+## major mods
+
+* I always hated the search on the maxbacklog stat
+I'd rather it just kept track of the flow with the biggest backlog,
+and now that we do bulk drops, we can automagically shift to the
+next biggest flow most of the time in 32 (64?) rounds.
+
+* Kathie chickened out on when to turn off codel. outside
+  of ns2, there's always another queue....
+
+* I'm increasingly uncomfortable with the "find the rtt"
+part of the algo in the case of ecn
 
