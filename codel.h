@@ -99,11 +99,13 @@ static inline u32 codel_time_to_us(codel_time_t val)
  * struct codel_params - contains codel parameters
  * @target:	target queue size (in time units)
  * @interval:	width of moving time window
+ * @sce_threshold:   threshold for marking packets with ecn SCE
  * @mtu:	device mtu, or minimal queue backlog in bytes.
  * @ecn:	is Explicit Congestion Notification enabled
  */
 struct codel_params {
 	codel_time_t	target;
+	codel_time_t	sce_threshold;
 	codel_time_t	interval;
 	u32		mtu;
 	bool		ecn;
@@ -119,6 +121,7 @@ struct codel_params {
  * @first_above_time:	when we went (or will go) continuously above target
  *			for interval
  * @drop_next:		time to drop next packet, or when we dropped last
+ * @ldelay:		sojourn time of last dequeued packet
  */
 struct codel_vars {
 	u32		count;
@@ -127,6 +130,7 @@ struct codel_vars {
 	u16		rec_inv_sqrt;
 	codel_time_t	first_above_time;
 	codel_time_t	drop_next;
+	codel_time_t	ldelay;
 };
 
 #define REC_INV_SQRT_BITS (8 * sizeof(u16)) /* or sizeof_in_bits(rec_inv_sqrt) */
@@ -145,6 +149,7 @@ struct codel_stats {
 	u32		drop_len;
 	u32		ecn_mark;
 	u32		maxpacket;
+	u32		sce_mark;
 };
 
 #define CODEL_DISABLED_THRESHOLD INT_MAX
