@@ -242,7 +242,7 @@ static struct sk_buff *codel_dequeue(void *ctx,
 						    vars->rec_inv_sqrt);
 	}
 end:
-	if (skb && !params->sce_threshold && codel_time_after(vars->ldelay, params->sce_threshold) &&
+	if (skb && params->sce_threshold && codel_time_after(vars->ldelay, params->sce_threshold) &&
 	    INET_ECN_set_sce(skb))
 		stats->sce_mark++;
 	return skb;
