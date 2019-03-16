@@ -12,7 +12,7 @@ static inline int IP_ECN_set_sce(struct iphdr *iph)
 	if (ecn != INET_ECN_ECT_0)
 		return 0;
 
-	ipv4_change_dsfield(iph, INET_ECN_MASK, INET_ECN_ECT_1);
+	ipv4_change_dsfield(iph, ~INET_ECN_MASK, INET_ECN_ECT_1);
 	return 1;
 }
 
@@ -23,7 +23,7 @@ static inline int IP6_ECN_set_sce(struct sk_buff *skb, struct ipv6hdr *iph)
 	if (ecn != INET_ECN_ECT_0)
 		return 0;
 
-	ipv6_change_dsfield(iph, INET_ECN_MASK, INET_ECN_ECT_1);
+	ipv6_change_dsfield(iph, ~INET_ECN_MASK, INET_ECN_ECT_1);
 	return 1;
 }
 
