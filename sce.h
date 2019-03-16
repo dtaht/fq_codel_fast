@@ -7,10 +7,10 @@ static inline int INET_ECN_is_sce(__u8 dsfield)
 
 static inline int IP_ECN_set_sce(struct iphdr *iph)
 {
-	u32 ecn = (iph->tos) & INET_ECN_MASK;
+	u8 ecn = ipv4_get_dsfield(iph) & INET_ECN_MASK;
 
 	if (ecn != INET_ECN_ECT_0)
-		return !ecn;
+		return 0;
 
 	ipv4_change_dsfield(iph, INET_ECN_MASK, INET_ECN_ECT_1);
 	return 1;
@@ -21,7 +21,7 @@ static inline int IP6_ECN_set_sce(struct sk_buff *skb, struct ipv6hdr *iph)
 	u8 ecn = ipv6_get_dsfield(iph) & INET_ECN_MASK;
 
 	if (ecn != INET_ECN_ECT_0)
-		return !ecn;
+		return 0;
 
 	ipv6_change_dsfield(iph, INET_ECN_MASK, INET_ECN_ECT_1);
 	return 1;
