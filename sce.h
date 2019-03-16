@@ -1,6 +1,6 @@
 static inline int INET_ECN_is_sce(__u8 dsfield)
 {
-	return (dsfield & INET_ECN_MASK) == INET_ECN_ECT_0;
+	return (dsfield & INET_ECN_MASK) == INET_ECN_ECT_1;
 }
 
 static inline int IP_ECN_set_sce(struct iphdr *iph)
@@ -8,38 +8,22 @@ static inline int IP_ECN_set_sce(struct iphdr *iph)
 	u32 check = (__force u32)iph->check;
 	u32 ecn = (iph->tos) & INET_ECN_MASK;
 
-	if (!(ecn == INET_ECN_ECT_0))
+	if (ecn != INET_ECN_ECT_0)
 		return !ecn;
 
-	ecn = INET_ECN_ECT_1;
-
-	/*
-	 * The following gives us:
-	 * INET_ECN_ECT_1 => check += htons(0xFFFD)
-	 * INET_ECN_ECT_0 => check += htons(0xFFFE)
-	 */
-	// FIXME: I do not understand this line
-	
-	check += (__force u16)htons(0xFFFB) + (__force u16)htons(ecn);
-
-	iph->check = (__force __sum16)(check + (check>=0xFFFF));
-	iph->tos |= INET_ECN_ECT_1;
+	ipv4_change_dsfield(iph, INET_ECN_MASK, INET_ECN_ECT_1);
 	return 1;
 }
 
 static inline int IP6_ECN_set_sce(struct sk_buff *skb, struct ipv6hdr *iph)
 {
 	__be32 from, to;
+	u8 ecn = ipv6_get_dsfield(iph) & INET_ECN_MASK;
 
-	if (INET_ECN_is_not_ect(ipv6_get_dsfield(iph)))
-		return 0;
+	if (ecn != INET_ECN_ECT_0)
+		return !ecn;
 
-	from = *(__be32 *)iph;
-	to = from | htonl(INET_ECN_CE << 20);
-	*(__be32 *)iph = to;
-	if (skb->ip_summed == CHECKSUM_COMPLETE)
-		skb->csum = csum_add(csum_sub(skb->csum, (__force __wsum)from),
-				     (__force __wsum)to);
+	ipv6_change_dsfield(iph, INET_ECN_MASK, INET_ECN_ECT_1);
 	return 1;
 }
 
