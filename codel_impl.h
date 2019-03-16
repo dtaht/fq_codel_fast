@@ -53,7 +53,7 @@ static void codel_params_init(struct codel_params *params)
 {
 	params->interval = MS2TIME(100);
 	params->target = MS2TIME(5);
-	params->sce_threshold = CODEL_DISABLED_THRESHOLD;
+	params->sce_threshold = 0;
 	params->ecn = false;
 }
 
@@ -242,7 +242,7 @@ static struct sk_buff *codel_dequeue(void *ctx,
 						    vars->rec_inv_sqrt);
 	}
 end:
-	if (skb && codel_time_after(vars->ldelay, params->sce_threshold) &&
+	if (skb && params->sce_threshold && codel_time_after(vars->ldelay, params->sce_threshold) &&
 	    INET_ECN_set_sce(skb))
 		stats->sce_mark++;
 	return skb;
