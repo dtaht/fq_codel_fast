@@ -9,7 +9,7 @@
  *
  *  Copyright (C) 2019 Jonathan Morton <chromatix99@gmail.com>
  *  Copyright (C) 2019 David Reed <dpreed@deepplum.com>
- *  Copyright (C) 2019 Michael D. Taht <dave.taht@gmail.com>
+ *  Copyright (C) 2019 Michael D. Täht <dave.taht@gmail.com>
  *  Copyright (C) 2019 Pete Heist <pete@heistp.net>
  *  Copyright (C) 2019 Toke Høiland-Jørgensen <toke@toke.dk>
  *  Copyright (C) 2019 Jason Ackley <jason@ackley.net>
