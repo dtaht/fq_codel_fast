@@ -1,4 +1,19 @@
-/* FIXME: Credit everyone involved and put a dual bsd/gpl licence header */
+// SPDX-License-Identifier: GPL-2.0
+
+#ifndef __SCE_H
+#define __SCE_H
+
+/*
+ *  Support header for the Some Congestion Experienced (SCE) ECT_1 codepoint
+ *  ( https://tools.ietf.org/html/draft-morton-taht-tsvwg-sce-00 )
+ *
+ *  Copyright (C) 2019 Jonathan Morton <chromatix99@gmail.com>
+ *  Copyright (C) 2019 David Reed <dpreed@deepplum.com>
+ *  Copyright (C) 2019 Michael D. Taht <dave.taht@gmail.com>
+ *  Copyright (C) 2019 Pete Heist <pete@heistp.net>
+ *  Copyright (C) 2019 Toke Høiland-Jørgensen <toke@toke.dk>
+ *  Copyright (C) 2019 Jason Ackley <jason@ackley.net>
+*/
 
 static inline int INET_ECN_is_sce(__u8 dsfield)
 {
@@ -13,6 +28,7 @@ static inline int IP_ECN_set_sce(struct iphdr *iph)
 		return 0;
 
 	ipv4_change_dsfield(iph, ~INET_ECN_MASK, INET_ECN_ECT_1);
+
 	return 1;
 }
 
@@ -24,9 +40,9 @@ static inline int IP6_ECN_set_sce(struct sk_buff *skb, struct ipv6hdr *iph)
 		return 0;
 
 	ipv6_change_dsfield(iph, ~INET_ECN_MASK, INET_ECN_ECT_1);
+
 	return 1;
 }
-
 
 static inline int INET_ECN_set_sce(struct sk_buff *skb)
 {
@@ -46,3 +62,5 @@ static inline int INET_ECN_set_sce(struct sk_buff *skb)
 
 	return 0;
 }
+
+#endif /* __SCE_H */
