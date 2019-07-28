@@ -52,13 +52,13 @@ struct fq_codel_flow {
 	struct sk_buff	  *tail;
 	struct list_head  flowchain;
 	int		  deficit;
+	u32		  backlog;
 	struct codel_vars cvars;
 }; /* please try to keep this structure <= 64 bytes */
 
 struct fq_codel_sched_data {
 	struct tcf_proto __rcu *filter_list; /* optional external classifier */
 	struct tcf_block *block;
-	u32		*backlogs;	/* backlog table [flows_cnt] */
 	u32		quantum;	/* psched_mtu(qdisc_dev(sch)); */
 	u32		drop_batch_size;
 	u32		memory_limit;
@@ -67,6 +67,8 @@ struct fq_codel_sched_data {
 	u32		memory_usage;
 	u32		drop_overmemory;
 	u32		drop_overlimit;
+	struct fq_codel_flow *fat_flow; /* Flows table [flows_cnt] */
+	u32 fat_backlog; /* Flows table [flows_cnt] */
 
 	struct list_head new_flows;	/* list of new flows */
 	struct list_head old_flows;	/* list of old flows */
@@ -115,29 +117,20 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 {
 	struct fq_codel_sched_data *q = qdisc_priv(sch);
 	struct sk_buff *skb;
-	unsigned int maxbacklog = 0, idx = 0, i, len;
+	unsigned int idx = 0, i, len;
 	struct fq_codel_flow *flow;
 	unsigned int threshold;
 	unsigned int mem = 0;
 
 	/* Queue is full! Find the fat flow and drop packet(s) from it.
-	 * This might sound expensive, but with 1024 flows, we scan
-	 * 4KB of memory, and we dont need to handle a complex tree
-	 * in fast path (packet queue/enqueue) with many cache misses.
 	 * In stress mode, we'll try to drop 64 packets from the flow,
 	 * amortizing this linear lookup to one cache line per drop.
 	 */
-	for (i = 0; i < FQ_FLOWS; i++) {
-		if (q->backlogs[i] > maxbacklog) {
-			maxbacklog = q->backlogs[i];
-			idx = i;
-		}
-	}
 
 	/* Our goal is to drop half of this fat flow backlog */
-	threshold = maxbacklog >> 1;
+	threshold = q->fat_backlog >> 1;
 
-	flow = &q->flows[idx];
+	flow = q->fat_flow;
 	len = 0;
 	i = 0;
 	do {
@@ -146,18 +139,18 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 		mem += get_codel_cb(skb)->mem_usage;
 		__qdisc_drop(skb, to_free);
 	} while (++i < max_packets && len < threshold);
-	/* Increase codel signalling rate also */
-	/*     vars->count+=i;
-    	       codel_Newton_step(vars);
-    	       codel_control_law(now, params->interval, vars->rec_inv_sqrt);
-	we don't have now here, and we really do want one packet to get through so...	*/
-	flow->cvars.count += i;
 
-	q->backlogs[idx] -= len;
+	flow->cvars.count += i;
+	flow->backlog -= len;
+	q->fat_backlog = flow->backlog;
+
 	q->memory_usage -= mem;
 	sch->qstats.drops += i;
 	sch->qstats.backlog -= len;
 	sch->q.qlen -= i;
+	idx = 1055; // just ignore for now
+	printk("bulk dropped %u packets\n", i);
+	// idx = q->flows - q->fat_flow; // FIXME
 	return idx;
 }
 
@@ -172,12 +165,16 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	bool memory_limited;
 
 	idx = fq_codel_classify(skb, sch, &ret);
-	// FIXME, share the time with the shaper
 	codel_set_enqueue_time(skb);
 	flow = &q->flows[idx];
 	flow_queue_add(flow, skb);
-	q->backlogs[idx] += qdisc_pkt_len(skb);
+	flow->backlog += qdisc_pkt_len(skb);
 	qdisc_qstats_backlog_inc(sch, skb);
+
+	if(flow->backlog > q->fat_backlog) {
+		q->fat_flow = flow;
+		q->fat_backlog = flow->backlog;
+	}
 
 	if (list_empty(&flow->flowchain)) {
 		list_add_tail(&flow->flowchain, &q->new_flows);
@@ -194,9 +191,8 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 
 	/* save this packet length as it might be dropped by fq_codel_drop() */
 	pkt_len = qdisc_pkt_len(skb);
-	/* fq_codel_drop() is quite expensive, as it performs a linear search
-	 * in q->backlogs[] to find a fat flow.
-	 * So instead of dropping a single packet, drop half of its backlog
+	/* fq_codel_drop() is expensive, as
+	 * instead of dropping a single packet, it drops half of its backlog
 	 * with a 64 packets limit to not add a too big cpu spike here.
 	 */
 	ret = fq_codel_drop(sch, q->drop_batch_size, to_free);
@@ -234,7 +230,8 @@ static struct sk_buff *dequeue_func(struct codel_vars *vars, void *ctx)
 	flow = container_of(vars, struct fq_codel_flow, cvars);
 	if (flow->head) {
 		skb = dequeue_head(flow);
-		q->backlogs[flow - q->flows] -= qdisc_pkt_len(skb);
+		flow->backlog -= qdisc_pkt_len(skb);
+		if(flow == q->fat_flow) q->fat_backlog = flow->backlog;
 		q->memory_usage -= get_codel_cb(skb)->mem_usage;
 		sch->q.qlen--;
 		sch->qstats.backlog -= qdisc_pkt_len(skb);
@@ -322,7 +319,6 @@ static void fq_codel_reset(struct Qdisc *sch)
 		INIT_LIST_HEAD(&flow->flowchain);
 		codel_vars_init(&flow->cvars);
 	}
-	memset(q->backlogs, 0, FQ_FLOWS * sizeof(u32));
 	sch->q.qlen = 0;
 	sch->qstats.backlog = 0;
 	q->memory_usage = 0;
@@ -414,7 +410,6 @@ static void fq_codel_destroy(struct Qdisc *sch)
 	struct fq_codel_sched_data *q = qdisc_priv(sch);
 
 	tcf_block_put(q->block);
-	kvfree(q->backlogs);
 }
 
 static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
@@ -434,6 +429,8 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 	codel_stats_init(&q->cstats);
 	q->cparams.ecn = true;
 	q->cparams.mtu = psched_mtu(qdisc_dev(sch));
+	q->fat_flow = q->flows;
+	q->fat_backlog = 0;
 
 	if (opt) {
 		err = fq_codel_change(sch, opt, extack);
@@ -445,11 +442,6 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 	if (err)
 		goto init_failure;
 
-	q->backlogs = kvcalloc(FQ_FLOWS, sizeof(u32), GFP_KERNEL);
-	if (!q->backlogs) {
-		err = -ENOMEM;
-		goto alloc_failure;
-	}
 	for (i = 0; i < FQ_FLOWS; i++) {
 		struct fq_codel_flow *flow = q->flows + i;
 
@@ -462,7 +454,6 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 		sch->flags &= ~TCQ_F_CAN_BYPASS;
 	return 0;
 
-alloc_failure:
 init_failure:
 	return err;
 }
@@ -606,7 +597,7 @@ static int fq_codel_dump_class_stats(struct Qdisc *sch, unsigned long cl,
 			}
 			sch_tree_unlock(sch);
 		}
-		qs.backlog = q->backlogs[idx];
+		qs.backlog = flow->backlog;
 		qs.drops = 0;
 	}
 	if (gnet_stats_copy_queue(d, NULL, &qs, qs.qlen) < 0)
@@ -651,7 +642,7 @@ static const struct Qdisc_class_ops fq_codel_class_ops = {
 
 static struct Qdisc_ops fq_codel_qdisc_ops __read_mostly = {
 	.cl_ops		=	&fq_codel_class_ops,
-	.id		=	"fq_codel",
+	.id		=	"fq_codel_fast",
 	.priv_size	=	sizeof(struct fq_codel_sched_data),
 	.enqueue	=	fq_codel_enqueue,
 	.dequeue	=	fq_codel_dequeue,
