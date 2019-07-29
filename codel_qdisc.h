@@ -66,9 +66,9 @@ static codel_time_t codel_get_enqueue_time(const struct sk_buff *skb)
 	return get_codel_cb(skb)->enqueue_time;
 }
 
-static void codel_set_enqueue_time(struct sk_buff *skb)
-{
-	get_codel_cb(skb)->enqueue_time = codel_get_time();
-}
+//static void codel_set_enqueue_time(struct sk_buff *skb)
+//{
+//	get_codel_cb(skb)->enqueue_time = codel_get_time();
+//}
 
 #endif

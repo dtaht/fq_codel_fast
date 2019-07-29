@@ -163,13 +163,55 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	int uninitialized_var(ret);
 	unsigned int pkt_len;
 	bool memory_limited;
+	int len = qdisc_pkt_len(skb);
+	codel_time_t now = ktime_get_ns() >> CODEL_SHIFT;
 
 	idx = fq_codel_classify(skb, sch, &ret);
-	codel_set_enqueue_time(skb);
+
 	flow = &q->flows[idx];
-	flow_queue_add(flow, skb);
-	flow->backlog += qdisc_pkt_len(skb);
-	qdisc_qstats_backlog_inc(sch, skb);
+
+	if (skb_is_gso(skb) && q->cparams.sce_threshold) {
+		struct sk_buff *segs, *nskb;
+		netdev_features_t features = netif_skb_features(skb);
+		unsigned int slen = 0, numsegs = 0;
+
+		segs = skb_gso_segment(skb, features & ~NETIF_F_GSO_MASK);
+		if (IS_ERR_OR_NULL(segs))
+			return qdisc_drop(skb, sch, to_free);
+		while (segs) {
+			nskb = segs->next;
+			segs->next = NULL;
+			qdisc_skb_cb(segs)->pkt_len = segs->len; // ?
+			get_codel_cb(segs)->enqueue_time = now;
+			get_codel_cb(segs)->mem_usage = skb->truesize;
+			q->memory_usage += skb->truesize;
+
+			flow_queue_add(flow, segs);
+
+			sch->q.qlen++;
+			numsegs++;
+			slen += segs->len;
+			segs = nskb;
+		}
+
+		/* stats */
+		flow->backlog       += slen;
+		sch->qstats.backlog += slen;
+		qdisc_tree_reduce_backlog(sch, 1-numsegs, len-slen);
+		consume_skb(skb);
+	} else {
+		/* not splitting */
+		get_codel_cb(skb)->enqueue_time = now;
+		get_codel_cb(skb)->mem_usage = skb->truesize;
+		q->memory_usage += skb->truesize;
+		flow_queue_add(flow, skb);
+		sch->q.qlen++;
+		/* stats */
+		flow->backlog       += len;
+		sch->qstats.backlog += len;
+	}
+
+//?	qdisc_qstats_backlog_inc(sch, skb);
 
 	if(flow->backlog > q->fat_backlog) {
 		q->fat_flow = flow;
@@ -180,17 +222,17 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		list_add_tail(&flow->flowchain, &q->new_flows);
 		flow->deficit = q->quantum;
 	}
-	get_codel_cb(skb)->mem_usage = skb->truesize;
-	q->memory_usage += get_codel_cb(skb)->mem_usage;
+
 	memory_limited = q->memory_usage > q->memory_limit;
-	if (++sch->q.qlen <= sch->limit && !memory_limited)
+	if (sch->q.qlen <= sch->limit && !memory_limited)
 		return NET_XMIT_SUCCESS;
 
 	prev_backlog = sch->qstats.backlog;
 	prev_qlen = sch->q.qlen;
 
 	/* save this packet length as it might be dropped by fq_codel_drop() */
-	pkt_len = qdisc_pkt_len(skb);
+	pkt_len = qdisc_pkt_len(skb); // FIXME this is not enough - can add 42
+	
 	/* fq_codel_drop() is expensive, as
 	 * instead of dropping a single packet, it drops half of its backlog
 	 * with a 64 packets limit to not add a too big cpu spike here.
