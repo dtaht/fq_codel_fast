@@ -149,8 +149,7 @@ static unsigned int fq_codel_drop(struct Qdisc *sch, unsigned int max_packets,
 	sch->qstats.backlog -= len;
 	sch->q.qlen -= i;
 	idx = 1055; // just ignore for now
-	printk("bulk dropped %u packets\n", i);
-	// idx = q->flows - q->fat_flow; // FIXME
+	// idx = (q->flows - q->fat_flow) >> FIXME SOME_CORRECT_DEFINE
 	return idx;
 }
 
