@@ -521,7 +521,6 @@ static int fq_codel_dump(struct Qdisc *sch, struct sk_buff *skb)
 			q->quantum) ||
 	    nla_put_u32(skb, TCA_FQ_CODEL_DROP_BATCH_SIZE,
 			q->drop_batch_size) ||
--
 	    nla_put_u32(skb, TCA_FQ_CODEL_MEMORY_LIMIT,
 			q->memory_limit) ||
 	    nla_put_u32(skb, TCA_FQ_CODEL_CE_THRESHOLD,
